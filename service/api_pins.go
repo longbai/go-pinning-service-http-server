@@ -10,32 +10,95 @@
 package service
 
 import (
+	"github.com/longbai/go-pinning-service-http-server/model"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
+//type Pin struct {
+//	Cid     string                 `json:"cid"`
+//	Name    string                 `json:"name,omitempty"`
+//	Origins []string               `json:"origins,omitempty"`
+//	Meta    map[string]interface{} `json:"meta,omitempty"`
+//}
+
+//type Result struct {
+//	RequestId string `json:"request_id"`
+//	Status    Status `json:"status"`
+//	Created   string `json:"created"`
+//	Pin       Pin `json:"pin"`
+//	Delegates []string               `json:"delegates"`
+//	Info      map[string]interface{} `json:"info,omitempty"`
+//}
+
+type ListReq struct {
+	Cid    []string `form:"cid,omitempty"`
+	Name   string `form:"name,omitempty"`
+	Match  TextMatchingStrategy `form:"match,omitempty"`
+	Status []Status `form:"status,omitempty"`
+	Before string `form:"before,omitempty"`
+	After  string `form:"after,omitempty"`
+	Limit  int    `form:"limit,omitempty"`
+	Meta   string `form:"meta,omitempty"`
+}
+
+type ListResp struct {
+	Count   string `json:"count"`
+	Results []PinStatus `json:"results"`
+}
+
 // PinsGet - List pin objects
 func PinsGet(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{})
+	var listReq ListReq
+	if c.ShouldBindQuery(&listReq) == nil {
+		log.Println(listReq.Cid)
+		log.Println(listReq.Name)
+	}
+	var listResp ListResp
+	c.JSON(http.StatusOK, &listResp)
 }
 
 // PinsPost - Add pin object
 func PinsPost(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{})
+	var pin model.Pin
+	if c.ShouldBindJSON(&pin)  == nil{
+
+	}
+	var result PinStatus
+	c.JSON(http.StatusOK, &result)
 }
 
 // PinsRequestidDelete - Remove pin object
 func PinsRequestidDelete(c *gin.Context) {
+	reqId := c.Param("requestid")
+	if reqId == ""{
+
+	}
 	c.JSON(http.StatusOK, gin.H{})
 }
 
 // PinsRequestidGet - Get pin object
 func PinsRequestidGet(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{})
+	reqId := c.Param("requestid")
+	if reqId == ""{
+
+	}
+	var result PinStatus
+	c.JSON(http.StatusOK, &result)
 }
 
 // PinsRequestidPost - Replace pin object
 func PinsRequestidPost(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{})
+	reqId := c.Param("requestid")
+	if reqId == ""{
+
+	}
+	var pin model.Pin
+	if c.ShouldBindJSON(&pin)  == nil{
+
+	}
+	var result PinStatus
+	c.JSON(http.StatusOK, &result)
 }

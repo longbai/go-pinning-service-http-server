@@ -10,22 +10,21 @@
 package main
 
 import (
+	"flag"
 	"log"
 
-	// WARNING!
-	// Change this to a fully-qualified import path
-	// once you place this file into your project.
-	// For example,
-	//
-	//sw "github.com/GIT_USER_ID/GIT_REPO_ID/service"
-	//
+	"github.com/longbai/go-pinning-service-http-server/model"
 	sw "github.com/longbai/go-pinning-service-http-server/service"
 )
 
 func main() {
+	var port = flag.String("p", ":8080", "listen port")
+	maddr := flag.String("d", "mongodb://localhost:27017", "mongo addr")
+	flag.Parse()
 	log.Printf("Server started")
-
+	model.OpenDb(*maddr)
 	router := sw.NewRouter()
 
-	log.Fatal(router.Run(":8080"))
+	log.Println(router.Run(*port))
+	model.CloseDb()
 }

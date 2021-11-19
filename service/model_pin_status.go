@@ -10,6 +10,7 @@
 package service
 
 import (
+	"github.com/longbai/go-pinning-service-http-server/model"
 	"time"
 )
 
@@ -24,7 +25,7 @@ type PinStatus struct {
 	// Immutable timestamp indicating when a pin request entered a pinning service; can be used for filtering results and pagination
 	Created time.Time `json:"created"`
 
-	Pin Pin `json:"pin"`
+	Pin model.Pin `json:"pin"`
 
 	// List of multiaddrs designated by pinning service for transferring any new data from external peers
 	Delegates []string `json:"delegates"`
