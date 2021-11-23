@@ -10,63 +10,106 @@
 package service
 
 import (
-	"github.com/longbai/go-pinning-service-http-server/model"
-	"log"
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/longbai/go-pinning-service-http-server/model"
 )
-
-//type Pin struct {
-//	Cid     string                 `json:"cid"`
-//	Name    string                 `json:"name,omitempty"`
-//	Origins []string               `json:"origins,omitempty"`
-//	Meta    map[string]interface{} `json:"meta,omitempty"`
-//}
-
-//type Result struct {
-//	RequestId string `json:"request_id"`
-//	Status    Status `json:"status"`
-//	Created   string `json:"created"`
-//	Pin       Pin `json:"pin"`
-//	Delegates []string               `json:"delegates"`
-//	Info      map[string]interface{} `json:"info,omitempty"`
-//}
 
 type ListReq struct {
 	Cid    []string `form:"cid,omitempty"`
 	Name   string `form:"name,omitempty"`
 	Match  TextMatchingStrategy `form:"match,omitempty"`
-	Status []Status `form:"status,omitempty"`
+	Status []model.Status `form:"status,omitempty"`
 	Before string `form:"before,omitempty"`
 	After  string `form:"after,omitempty"`
-	Limit  int    `form:"limit,omitempty"`
+	Limit  int64    `form:"limit,omitempty"`
 	Meta   string `form:"meta,omitempty"`
 }
 
 type ListResp struct {
-	Count   string `json:"count"`
-	Results []PinStatus `json:"results"`
+	Count   int `json:"count"`
+	Results []model.PinStatus `json:"results"`
 }
 
 // PinsGet - List pin objects
 func PinsGet(c *gin.Context) {
 	var listReq ListReq
-	if c.ShouldBindQuery(&listReq) == nil {
-		log.Println(listReq.Cid)
-		log.Println(listReq.Name)
+	if err := c.BindQuery(&listReq); err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
 	}
-	var listResp ListResp
-	c.JSON(http.StatusOK, &listResp)
+	limit := listReq.Limit
+	if limit == 0 {
+		limit = 100
+	}
+	l, err := model.PinList(c.Request.Context(), limit)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
+	}
+	if l == nil {
+		c.JSON(http.StatusNotFound, Failure{Error: FailureError{
+			Reason:  "The specified resource was not found",
+			Details: "",
+		}})
+		return
+	}
+	list := ListResp{
+		Count:   len(l),
+		Results: l,
+	}
+	c.JSON(http.StatusOK, &list)
 }
 
 // PinsPost - Add pin object
 func PinsPost(c *gin.Context) {
 	var pin model.Pin
-	if c.ShouldBindJSON(&pin)  == nil{
-
+	if err := c.BindJSON(&pin); err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
 	}
-	var result PinStatus
+	result := model.PinStatus{
+		Requestid: model.IdGen(),
+		Status:    model.QUEUED,
+		Created:   time.Now(),
+		Pin:       pin,
+		Delegates: nil,
+		Info:      nil,
+	}
+	if err := model.PinAdd(c.Request.Context(), &result); err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
+	}
+	go func() {
+		ctx := context.Background()
+		result.Status = model.PINNING
+		model.PinUpdate(ctx, &result)
+		err := ipfsPinAdd(ctx, &result)
+		if err == nil {
+			result.Status = model.PINNED
+			model.PinUpdate(ctx, &result)
+		} else {
+			result.Status = model.FAILED
+			model.PinUpdate(ctx, &result)
+		}
+	}()
+
 	c.JSON(http.StatusOK, &result)
 }
 
@@ -74,8 +117,33 @@ func PinsPost(c *gin.Context) {
 func PinsRequestidDelete(c *gin.Context) {
 	reqId := c.Param("requestid")
 	if reqId == ""{
-
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  "no requestid",
+			Details: "",
+		}})
+		return
 	}
+	result, err := model.PinGet(c.Request.Context(), reqId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
+	}
+	if result == nil {
+		c.JSON(http.StatusNotFound, Failure{Error: FailureError{
+			Reason:  "The specified resource was not found",
+			Details: "",
+		}})
+		return
+	}
+
+	model.PinDelete(c.Request.Context(), reqId)
+	go func() {
+		ctx := context.Background()
+		ipfsPinRemove(ctx, result)
+	}()
 	c.JSON(http.StatusOK, gin.H{})
 }
 
@@ -83,22 +151,72 @@ func PinsRequestidDelete(c *gin.Context) {
 func PinsRequestidGet(c *gin.Context) {
 	reqId := c.Param("requestid")
 	if reqId == ""{
-
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  "no requestid",
+			Details: "",
+		}})
+		return
 	}
-	var result PinStatus
-	c.JSON(http.StatusOK, &result)
+
+	result, err := model.PinGet(c.Request.Context(), reqId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
+	}
+	if result == nil {
+		c.JSON(http.StatusNotFound, Failure{Error: FailureError{
+			Reason:  "The specified resource was not found",
+			Details: "",
+		}})
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 // PinsRequestidPost - Replace pin object
 func PinsRequestidPost(c *gin.Context) {
 	reqId := c.Param("requestid")
 	if reqId == ""{
-
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  "no requestid",
+			Details: "",
+		}})
+		return
 	}
 	var pin model.Pin
-	if c.ShouldBindJSON(&pin)  == nil{
-
+	if err := c.BindJSON(&pin);  err != nil{
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
 	}
-	var result PinStatus
+	result, err := model.PinGet(c.Request.Context(), reqId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
+	}
+	if result == nil {
+		c.JSON(http.StatusNotFound, Failure{Error: FailureError{
+			Reason:  "The specified resource was not found",
+			Details: "",
+		}})
+		return
+	}
+	result.Pin = pin
+	err = model.PinUpdate(c.Request.Context(), result)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
+	}
 	c.JSON(http.StatusOK, &result)
 }

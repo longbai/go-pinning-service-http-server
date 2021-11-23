@@ -9,6 +9,8 @@
 
 package service
 
+import "github.com/longbai/go-pinning-service-http-server/model"
+
 // PinResults - Response used for listing pin objects matching request
 type PinResults struct {
 
@@ -16,5 +18,5 @@ type PinResults struct {
 	Count int32 `json:"count"`
 
 	// An array of PinStatus results
-	Results []PinStatus `json:"results"`
+	Results []model.PinStatus `json:"results"`
 }

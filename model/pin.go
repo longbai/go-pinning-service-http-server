@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/qiniu/qmgo"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type db struct {
@@ -14,7 +15,11 @@ type db struct {
 
 var store *db
 
-func OpenDb(addr string){
+func IdGen() string {
+	return qmgo.NewObjectID().Hex()
+}
+
+func OpenDb(addr string) {
 	ctx := context.Background()
 	client, err := qmgo.NewClient(ctx, &qmgo.Config{Uri: addr})
 	if err != nil {
@@ -24,26 +29,46 @@ func OpenDb(addr string){
 	store = &db{d, client}
 }
 
-func Add(){
-
+func PinAdd(ctx context.Context, status *PinStatus) error {
+	_, err := store.Collection("pin").InsertOne(ctx, status)
+	return err
 }
 
-func Get(){
-
+func PinGet(ctx context.Context, reqId string) (*PinStatus, error) {
+	one := PinStatus{}
+	err := store.Collection("pin").Find(ctx, bson.M{"requestid": reqId}).One(&one)
+	if err != nil {
+		if err == qmgo.ErrNoSuchDocuments {
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	}
+	return &one, nil
 }
 
-func List(){
+func PinList(ctx context.Context, limit int64) ([]PinStatus, error) {
+	batch := []PinStatus{}
+	filter := bson.M{}
 
+	err := store.Collection("pin").Find(ctx, filter).Limit(limit).All(&batch)
+	if err != nil {
+		if err == qmgo.ErrNoSuchDocuments {
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	}
+	return batch, nil
 }
 
-func Update(){
-
+func PinUpdate(ctx context.Context, status *PinStatus) error {
+	return store.Collection("pin").UpdateOne(ctx, bson.M{"requestid": status.Requestid}, bson.M{"$set": status})
 }
 
-func Delete(){
-
+func PinDelete(ctx context.Context, reqId string) error {
+	return store.Collection("pin").Remove(ctx, bson.M{"requestid": reqId})
 }
-
 
 func CloseDb() {
 	if store != nil {

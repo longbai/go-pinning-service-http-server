@@ -20,9 +20,12 @@ import (
 func main() {
 	var port = flag.String("p", ":8080", "listen port")
 	maddr := flag.String("d", "mongodb://localhost:27017", "mongo addr")
+	ipfsHost  := flag.String("h", "127.0.0..1", "ipfs host")
+	ipfsPort  := flag.String("sp", "5001", "ipfs port")
 	flag.Parse()
 	log.Printf("Server started")
 	model.OpenDb(*maddr)
+	sw.IpfsInit(*ipfsHost, *ipfsPort)
 	router := sw.NewRouter()
 
 	log.Println(router.Run(*port))
