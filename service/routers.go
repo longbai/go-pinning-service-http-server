@@ -98,4 +98,12 @@ var routes = Routes{
 		"/pins/:requestid",
 		PinsRequestidPost,
 	},
+
+	//only for debug
+	{
+		"PinLs",
+		http.MethodGet,
+		"/pin-ls",
+		PinLs,
+	},
 }

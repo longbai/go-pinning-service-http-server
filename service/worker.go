@@ -8,6 +8,7 @@ import (
 	"github.com/ipfs/interface-go-ipfs-core/path"
 	"github.com/longbai/go-pinning-service-http-server/model"
 	ma "github.com/multiformats/go-multiaddr"
+	"log"
 )
 
 //def ipfs_add
@@ -54,6 +55,7 @@ func newIpfsClient(ip, port string)(*httpapi.HttpApi, error) {
 	a := fmt.Sprintf("/ip4/%s/tcp/%s", ip, port)
 	addr, err := ma.NewMultiaddr(a)
 	if err != nil {
+		log.Println("ipfs client error", err)
 		return nil, err
 	}
  	return httpapi.NewApi(addr)
@@ -62,10 +64,12 @@ func newIpfsClient(ip, port string)(*httpapi.HttpApi, error) {
 func ipfsPinAdd(ctx context.Context, pin *model.PinStatus) error{
 	c, err := newIpfsClient(ipfsCfg.ip, ipfsCfg.port)
 	if err != nil {
+		log.Println("ipfs add client error", err)
 		return err
 	}
 	id, err := cid.Decode(pin.Pin.Cid)
 	if err != nil {
+		log.Println("ipfs add cid error", err)
 		return err
 	}
 	p := path.IpfsPath(id)
@@ -75,12 +79,32 @@ func ipfsPinAdd(ctx context.Context, pin *model.PinStatus) error{
 func ipfsPinRemove(ctx context.Context, pin *model.PinStatus) error{
 	c, err := newIpfsClient(ipfsCfg.ip, ipfsCfg.port)
 	if err != nil {
+		log.Println("ipfs rem client error", err)
 		return err
 	}
 	id, err := cid.Decode(pin.Pin.Cid)
 	if err != nil {
+		log.Println("ipfs add cid error", err)
 		return err
 	}
 	p := path.IpfsPath(id)
 	return c.Pin().Rm(ctx, p)
+}
+
+func ipfsList(ctx context.Context) ([]string, error) {
+	c, err := newIpfsClient(ipfsCfg.ip, ipfsCfg.port)
+	if err != nil {
+		log.Println("ipfs ls client error", err)
+		return nil, err
+	}
+	p, err := c.Pin().Ls(ctx)
+	if err != nil {
+		log.Println("ipfs ls error", err)
+		return nil, err
+	}
+	var ls []string
+	for v := range p {
+		ls = append(ls, v.Path().Cid().String())
+	}
+	return ls, nil
 }

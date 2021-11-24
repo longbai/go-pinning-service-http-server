@@ -11,6 +11,7 @@ package service
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -104,7 +105,9 @@ func PinsPost(c *gin.Context) {
 		if err == nil {
 			result.Status = model.PINNED
 			model.PinUpdate(ctx, &result)
+			log.Println("ipfs add pin", result.Pin.Cid, "succeed")
 		} else {
+			log.Println("ipfs add failed", err)
 			result.Status = model.FAILED
 			model.PinUpdate(ctx, &result)
 		}
@@ -219,4 +222,16 @@ func PinsRequestidPost(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, &result)
+}
+
+func PinLs(c *gin.Context) {
+	v, err := ipfsList(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "",
+		}})
+		return
+	}
+	c.JSON(http.StatusOK, v)
 }
