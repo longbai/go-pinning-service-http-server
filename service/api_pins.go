@@ -235,3 +235,58 @@ func PinLs(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, v)
 }
+
+func PinPut(c *gin.Context) {
+	name := c.Query("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  "no name",
+			Details: "no name",
+		}})
+		return
+	}
+	pined := c.Query("pin")
+	cid, err := ipfsPut(c.Request.Context(), c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "put failed",
+		}})
+		return
+	}
+	log.Println("cid", cid)
+
+	pin := model.Pin{
+		Cid:     cid,
+		Name:    name,
+		Origins: nil,
+		Meta:    nil,
+	}
+
+	result := model.PinStatus{
+		Requestid: model.IdGen(),
+		Status:    model.PINNED,
+		Created:   time.Now(),
+		Pin:       pin,
+		Delegates: nil,
+		Info:      nil,
+	}
+	if pined != "" {
+		err = ipfsPinAdd(c.Request.Context(), &result)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+				Reason:  err.Error(),
+				Details: "pin add failed",
+			}})
+			return
+		}
+	}
+	if err := model.PinAdd(c.Request.Context(), &result); err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  err.Error(),
+			Details: "pin model add failed",
+		}})
+		return
+	}
+	c.JSON(http.StatusOK, &result)
+}

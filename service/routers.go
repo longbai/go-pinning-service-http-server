@@ -106,4 +106,11 @@ var routes = Routes{
 		"/pin-ls",
 		PinLs,
 	},
+
+	{
+		"PinPut",
+		http.MethodPost,
+		"/pin-put",
+		PinPut,
+	},
 }

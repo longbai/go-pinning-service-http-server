@@ -3,12 +3,15 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
+
 	cid "github.com/ipfs/go-cid"
+	shell "github.com/ipfs/go-ipfs-api"
 	"github.com/ipfs/go-ipfs-http-client"
 	"github.com/ipfs/interface-go-ipfs-core/path"
 	"github.com/longbai/go-pinning-service-http-server/model"
 	ma "github.com/multiformats/go-multiaddr"
-	"log"
 )
 
 //def ipfs_add
@@ -107,4 +110,21 @@ func ipfsList(ctx context.Context) ([]string, error) {
 		ls = append(ls, v.Path().Cid().String())
 	}
 	return ls, nil
+}
+
+func ipfsPut(ctx context.Context, reader io.Reader) (string, error) {
+	sh := shell.NewShell(fmt.Sprintf("%s:%s", ipfsCfg.ip, ipfsCfg.port))
+	fileHash, err := sh.Add(reader)
+	return fileHash, err
+	//c, err := newIpfsClient(ipfsCfg.ip, ipfsCfg.port)
+	//if err != nil {
+	//	log.Println("ipfs ls client error", err)
+	//	return "", err
+	//}
+	//obj, err := c.Object().Put(ctx, reader)
+	//if err != nil {
+	//	log.Println("ipfs put error", err)
+	//	return "", err
+	//}
+	//return obj.Cid().String(), nil
 }
