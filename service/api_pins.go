@@ -13,6 +13,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,18 +22,18 @@ import (
 )
 
 type ListReq struct {
-	Cid    []string `form:"cid,omitempty"`
-	Name   string `form:"name,omitempty"`
+	Cid    []string             `form:"cid,omitempty"`
+	Name   string               `form:"name,omitempty"`
 	Match  TextMatchingStrategy `form:"match,omitempty"`
-	Status []model.Status `form:"status,omitempty"`
-	Before string `form:"before,omitempty"`
-	After  string `form:"after,omitempty"`
-	Limit  int64    `form:"limit,omitempty"`
-	Meta   string `form:"meta,omitempty"`
+	Status []model.Status       `form:"status,omitempty"`
+	Before string               `form:"before,omitempty"`
+	After  string               `form:"after,omitempty"`
+	Limit  int64                `form:"limit,omitempty"`
+	Meta   string               `form:"meta,omitempty"`
 }
 
 type ListResp struct {
-	Count   int `json:"count"`
+	Count   int               `json:"count"`
 	Results []model.PinStatus `json:"results"`
 }
 
@@ -50,7 +51,7 @@ func PinsGet(c *gin.Context) {
 	if limit == 0 {
 		limit = 100
 	}
-	l, err := model.PinList(c.Request.Context(), limit)
+	l, err := model.PinList(c.Request.Context(), 0, limit)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
 			Reason:  err.Error(),
@@ -119,7 +120,7 @@ func PinsPost(c *gin.Context) {
 // PinsRequestidDelete - Remove pin object
 func PinsRequestidDelete(c *gin.Context) {
 	reqId := c.Param("requestid")
-	if reqId == ""{
+	if reqId == "" {
 		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
 			Reason:  "no requestid",
 			Details: "",
@@ -153,7 +154,7 @@ func PinsRequestidDelete(c *gin.Context) {
 // PinsRequestidGet - Get pin object
 func PinsRequestidGet(c *gin.Context) {
 	reqId := c.Param("requestid")
-	if reqId == ""{
+	if reqId == "" {
 		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
 			Reason:  "no requestid",
 			Details: "",
@@ -182,7 +183,7 @@ func PinsRequestidGet(c *gin.Context) {
 // PinsRequestidPost - Replace pin object
 func PinsRequestidPost(c *gin.Context) {
 	reqId := c.Param("requestid")
-	if reqId == ""{
+	if reqId == "" {
 		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
 			Reason:  "no requestid",
 			Details: "",
@@ -190,7 +191,7 @@ func PinsRequestidPost(c *gin.Context) {
 		return
 	}
 	var pin model.Pin
-	if err := c.BindJSON(&pin);  err != nil{
+	if err := c.BindJSON(&pin); err != nil {
 		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
 			Reason:  err.Error(),
 			Details: "",
@@ -289,4 +290,138 @@ func PinPut(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, &result)
+}
+
+type uploadAndPinFileResp struct {
+	Id string `json:"id"`
+}
+
+func UploadAndPinFile(c *gin.Context) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  "Parse body failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+	name := fileHeader.Filename
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  "Get file failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+	cid, err := ipfsPut(c.Request.Context(), file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Failure{Error: FailureError{
+			Reason:  "IPFS put failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+	log.Println("cid", cid)
+
+	pin := model.Pin{
+		Cid:     cid,
+		Name:    name,
+		Origins: nil,
+		Meta:    nil,
+	}
+
+	result := model.PinStatus{
+		Requestid: model.IdGen(),
+		Status:    model.PINNED,
+		Created:   time.Now(),
+		Pin:       pin,
+		Delegates: nil,
+		Info:      nil,
+	}
+	err = ipfsPinAdd(c.Request.Context(), &result)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Failure{Error: FailureError{
+			Reason:  "Pin add failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+	if err := model.PinAdd(c.Request.Context(), &result); err != nil {
+		c.JSON(http.StatusInternalServerError, Failure{Error: FailureError{
+			Reason:  "Pin model add failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+	c.JSON(http.StatusOK, &uploadAndPinFileResp{result.Requestid})
+}
+
+var typeFile = 0
+
+type pinningItem struct {
+	Id       string    `json:"id"`       // "640000202002265729",
+	Cid      string    `json:"cid"`      // "Fd4fd380-E2d3-d8B2-1CBA-BB8419C6ef8A",
+	Type     int       `json:"type"`     // 1,
+	Name     string    `json:"name"`     // "Kenneth Walker",
+	Size     int64     `json:"size"`     // 8586413972734038,
+	CreateAt time.Time `json:"createAt"` // "1996-10-07 23:27:10"
+}
+
+type listPinningItemsResp struct {
+	Total int64          `json:"total"`
+	Items []*pinningItem `json:"items"`
+}
+
+func ListPinningItems(c *gin.Context) {
+	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  "Parse offset failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Failure{Error: FailureError{
+			Reason:  "Parse limit failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+
+	l, err := model.PinList(c.Request.Context(), int64(offset), int64(limit))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Failure{Error: FailureError{
+			Reason:  "Pin list failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+	total, err := model.PinCount(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Failure{Error: FailureError{
+			Reason:  "Pin count failed",
+			Details: err.Error(),
+		}})
+		return
+	}
+
+	items := make([]*pinningItem, 0, len(l))
+	for _, pinStatus := range l {
+		item := &pinningItem{
+			Id:       pinStatus.Requestid,
+			Cid:      pinStatus.Pin.Cid,
+			Type:     typeFile, // TODO
+			Name:     pinStatus.Pin.Name,
+			Size:     0, // TODO
+			CreateAt: pinStatus.Created,
+		}
+		items = append(items, item)
+	}
+	c.JSON(http.StatusOK, &listPinningItemsResp{
+		Total: total,
+		Items: items,
+	})
 }
