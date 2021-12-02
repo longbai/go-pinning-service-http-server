@@ -47,11 +47,23 @@ func PinGet(ctx context.Context, reqId string) (*PinStatus, error) {
 	return &one, nil
 }
 
-func PinList(ctx context.Context, limit int64) ([]PinStatus, error) {
+func PinCount(ctx context.Context) (int64, error) {
+	filter := bson.M{}
+	count, err := store.Collection("pin").Find(ctx, filter).Count()
+	if err != nil {
+		if err == qmgo.ErrNoSuchDocuments {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return count, nil
+}
+
+func PinList(ctx context.Context, offset, limit int64) ([]PinStatus, error) {
 	batch := []PinStatus{}
 	filter := bson.M{}
 
-	err := store.Collection("pin").Find(ctx, filter).Limit(limit).All(&batch)
+	err := store.Collection("pin").Find(ctx, filter).Skip(offset).Limit(limit).All(&batch)
 	if err != nil {
 		if err == qmgo.ErrNoSuchDocuments {
 			return nil, nil
