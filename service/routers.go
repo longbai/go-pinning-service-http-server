@@ -127,4 +127,11 @@ var routes = Routes{
 		"/v1/pinning/items",
 		ListPinningItems,
 	},
+
+	{
+		"DeletePinningItems",
+		http.MethodDelete,
+		"/v1/pinning/items/:requestid",
+		PinsRequestidDelete,
+	},
 }
